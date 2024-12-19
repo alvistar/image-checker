@@ -14,6 +14,7 @@ import (
 
 	imagev1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -115,10 +116,14 @@ func main() {
 	}
 	flag.Parse()
 
-	// Build config from kubeconfig file
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	// Try in-cluster config first, fall back to kubeconfig file
+	config, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		// Fall back to kubeconfig
+		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+		if err != nil {
+			panic(err.Error())
+		}
 	}
 
 	// Create controller-runtime client
