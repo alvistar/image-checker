@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -50,33 +50,32 @@ func checkUpdates(c client.Client) {
 	// List ImagePolicies from all namespaces
 	var imagePolicies imagev1.ImagePolicyList
 	if err := c.List(context.Background(), &imagePolicies); err != nil {
-		fmt.Printf("Error listing ImagePolicies: %v\n", err)
+		log.Printf("Error listing ImagePolicies: %v", err)
 		return
 	}
 
 	// List all pods
 	var pods corev1.PodList
 	if err := c.List(context.Background(), &pods); err != nil {
-		fmt.Printf("Error listing Pods: %v\n", err)
+		log.Printf("Error listing Pods: %v", err)
 		return
 	}
 
 	// Check ImagePolicies and pods
-	fmt.Printf("\nFound %d ImagePolicies:\n", len(imagePolicies.Items))
+	log.Printf("Found %d ImagePolicies", len(imagePolicies.Items))
 	for _, policy := range imagePolicies.Items {
-		fmt.Printf("\nName: %s\n", policy.Name)
-		fmt.Printf("Namespace: %s\n", policy.Namespace)
+		log.Printf("ImagePolicy: name=%s namespace=%s", policy.Name, policy.Namespace)
 		
 		latestImage := policy.Status.LatestImage
 		if latestImage != "" {
-			fmt.Printf("Latest Image: %s\n", latestImage)
+			log.Printf("Latest Image: %s", latestImage)
 			baseLatestImage := getBaseImage(latestImage)
 
 			// Check pods using this image
 			for _, pod := range pods.Items {
 				for _, container := range pod.Spec.Containers {
 					if getBaseImage(container.Image) == baseLatestImage {
-						fmt.Printf("Pod %s/%s using image: %s\n", 
+						log.Printf("Pod %s/%s using image: %s", 
 							pod.Namespace, 
 							pod.Name, 
 							container.Image)
@@ -84,7 +83,10 @@ func checkUpdates(c client.Client) {
 						// Update metric
 						value := 0.0
 						if container.Image != latestImage {
-							fmt.Printf("  -> Not using latest version!\n")
+							log.Printf("  -> Pod %s/%s container %s not using latest version", 
+								pod.Namespace, 
+								pod.Name,
+								container.Name)
 							value = 1.0
 						}
 						updateAvailable.With(prometheus.Labels{
@@ -98,12 +100,14 @@ func checkUpdates(c client.Client) {
 		}
 		
 		if policy.Spec.Policy.SemVer != nil {
-			fmt.Printf("Semver Range: %s\n", policy.Spec.Policy.SemVer.Range)
+			log.Printf("Semver Range: %s", policy.Spec.Policy.SemVer.Range)
 		}
 	}
 }
 
 func main() {
+	// Configure logging
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	var (
 		kubeconfig *string
 		interval   = flag.Duration("interval", 5*time.Minute, "Polling interval")
@@ -165,7 +169,7 @@ func main() {
 	}()
 
 	// Start HTTP server
-	fmt.Printf("Starting metrics server on %s\n", *addr)
+	log.Printf("Starting metrics server on %s", *addr)
 	if err := http.ListenAndServe(*addr, nil); err != nil {
 		panic(err)
 	}
