@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-policy-monitor
+  namespace: monitoring
+  labels:
+    app: image-policy-monitor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-policy-monitor
+  template:
+    metadata:
+      labels:
+        app: image-policy-monitor
+    spec:
+      serviceAccountName: image-policy-monitor
+      containers:
+      - name: monitor
+        image: ghcr.io/alvistar/image-checker:sha-6153106  # Replace with your image
+        args:
+        - "--interval=5m"
+        - "--listen-address=:2112"
+        ports:
+        - name: metrics
+          containerPort: 2112
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop: ["ALL"]
