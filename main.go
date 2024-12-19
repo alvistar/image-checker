@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	imagev1 "github.com/fluxcd/image-reflector-controller/api/v1beta2"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	runtime "k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func main() {
@@ -28,25 +29,31 @@ func main() {
 		panic(err.Error())
 	}
 
-	// Create clientset
-	clientset, err := kubernetes.NewForConfig(config)
+	// Create controller-runtime client
+	scheme := runtime.NewScheme()
+	imagev1.AddToScheme(scheme)
+	
+	c, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		panic(err.Error())
 	}
 
-	// Get pods from all namespaces
-	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
+	// List ImagePolicies from all namespaces
+	var imagePolicies imagev1.ImagePolicyList
+	if err := c.List(context.Background(), &imagePolicies); err != nil {
 		panic(err.Error())
 	}
 
-	// Print pods with their annotations
-	fmt.Printf("Found %d pods\n", len(pods.Items))
-	for _, pod := range pods.Items {
-		fmt.Printf("\nPod Name: %s\n", pod.Name)
-		fmt.Printf("Namespace: %s\n", pod.Namespace)
-		fmt.Printf("Annotations: %v\n", pod.Annotations)
-		fmt.Printf("CPU Request: %s\n", pod.Spec.Containers[0].Resources.Requests.Cpu().String())
-		fmt.Printf("Memory Request: %s\n", pod.Spec.Containers[0].Resources.Requests.Memory().String())
+	// Print ImagePolicies
+	fmt.Printf("\nFound %d ImagePolicies:\n", len(imagePolicies.Items))
+	for _, policy := range imagePolicies.Items {
+		fmt.Printf("\nName: %s\n", policy.Name)
+		fmt.Printf("Namespace: %s\n", policy.Namespace)
+		if policy.Status.LatestImage != "" {
+			fmt.Printf("Latest Image: %s\n", policy.Status.LatestImage)
+		}
+		if policy.Spec.Policy.SemVer != nil {
+			fmt.Printf("Semver Range: %s\n", policy.Spec.Policy.SemVer.Range)
+		}
 	}
 }
